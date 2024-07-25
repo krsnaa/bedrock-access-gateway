@@ -1,3 +1,5 @@
+""" Defines data models using Pydantic for request and response structures """
+
 import time
 from typing import Literal, Iterable
 
@@ -148,7 +150,7 @@ class ChatStreamResponse(BaseChatResponse):
 
 class EmbeddingsRequest(BaseModel):
     input: str | list[str] | Iterable[int | Iterable[int]]
-    model: str
+    model: str | None = None
     encoding_format: Literal["float", "base64"] = "float"
     dimensions: int | None = None  # not used.
     user: str | None = None  # not used.

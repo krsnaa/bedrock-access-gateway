@@ -1,3 +1,5 @@
+""" Endpoints for generating embeddings """
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Body
@@ -15,22 +17,26 @@ router = APIRouter(
 
 @router.post("", response_model=EmbeddingsResponse)
 async def embeddings(
-        embeddings_request: Annotated[
-            EmbeddingsRequest,
-            Body(
-                examples=[
-                    {
-                        "model": "cohere.embed-multilingual-v3",
-                        "input": [
-                            "Your text string goes here"
-                        ],
-                    }
-                ],
-            ),
-        ]
+    embeddings_request: Annotated[
+        EmbeddingsRequest,
+        Body(
+            examples=[
+                {
+                    "model": "cohere.embed-multilingual-v3",
+                    "input": ["Your text string goes here"],
+                }
+            ],
+        ),
+    ]
 ):
-    if embeddings_request.model.lower().startswith("text-embedding-"):
+    if embeddings_request.model is None or embeddings_request.model.lower().startswith(
+        "text-embedding-"
+    ):
+        if embeddings_request.model is None:
+            print("No model specified, using default model:", DEFAULT_EMBEDDING_MODEL)
+
         embeddings_request.model = DEFAULT_EMBEDDING_MODEL
+
     # Exception will be raised if model not supported.
     model = get_embeddings_model(embeddings_request.model)
     return model.embed(embeddings_request)

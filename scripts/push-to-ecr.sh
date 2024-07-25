@@ -8,7 +8,7 @@
 # Define variables
 IMAGE_NAME="bedrock-proxy-api"
 TAG="latest"
-AWS_REGIONS=("us-west-2") # List of AWS regions
+AWS_REGIONS=("us-east-1") # List of AWS regions
 #AWS_REGIONS=("us-east-1" "us-west-2" "eu-central-1" "ap-southeast-1" "ap-northeast-1") # List of AWS regions
 
 # Build Docker image

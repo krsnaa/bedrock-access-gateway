@@ -56,6 +56,7 @@ SUPPORTED_BEDROCK_EMBEDDING_MODELS = {
 ENCODER = tiktoken.get_encoding("cl100k_base")
 
 
+# Handles chat completions
 class BedrockModel(BaseChatModel):
     # https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html#conversation-inference-supported-models-features
     _supported_models = {
@@ -174,15 +175,22 @@ class BedrockModel(BaseChatModel):
 
     def validate(self, chat_request: ChatRequest):
         """Perform basic validation on requests"""
+
         error = ""
         # check if model is supported
         if chat_request.model not in self._supported_models.keys():
             error = f"Unsupported model {chat_request.model}, please use models API to get a list of supported models"
 
         # check if tool call is supported
-        elif chat_request.tools and not self._is_tool_call_supported(chat_request.model, stream=chat_request.stream):
-            tool_call_info = "Tool call with streaming" if chat_request.stream else "Tool call"
-            error = f"{tool_call_info} is currently not supported by {chat_request.model}"
+        elif chat_request.tools and not self._is_tool_call_supported(
+            chat_request.model, stream=chat_request.stream
+        ):
+            tool_call_info = (
+                "Tool call with streaming" if chat_request.stream else "Tool call"
+            )
+            error = (
+                f"{tool_call_info} is currently not supported by {chat_request.model}"
+            )
 
         if error:
             raise HTTPException(
@@ -202,8 +210,10 @@ class BedrockModel(BaseChatModel):
 
         try:
             if stream:
+                print("STREAMING chat - bedrock_runtime.converse_stream()...")
                 response = bedrock_runtime.converse_stream(**args)
             else:
+                print("non-streaming chat - bedrock_runtime.converse()...")
                 response = bedrock_runtime.converse(**args)
         except bedrock_runtime.exceptions.ValidationException as e:
             logger.error("Validation Error: " + str(e))
@@ -253,8 +263,8 @@ class BedrockModel(BaseChatModel):
             if stream_response.choices:
                 yield self.stream_response_to_bytes(stream_response)
             elif (
-                    chat_request.stream_options
-                    and chat_request.stream_options.include_usage
+                chat_request.stream_options
+                and chat_request.stream_options.include_usage
             ):
                 # An empty choices for Usage as per OpenAI doc below:
                 # if you set stream_options: {"include_usage": true}.
@@ -327,7 +337,7 @@ class BedrockModel(BaseChatModel):
                                     "toolUse": {
                                         "toolUseId": message.tool_calls[0].id,
                                         "name": message.tool_calls[0].function.name,
-                                        "input": tool_input
+                                        "input": tool_input,
                                     }
                                 }
                             ],
@@ -366,6 +376,7 @@ class BedrockModel(BaseChatModel):
 
         messages = self._parse_messages(chat_request)
         system_prompts = self._parse_system_prompts(chat_request)
+        print("system_prompts:", system_prompts)
 
         # Base inference parameters.
         inference_config = {
@@ -380,8 +391,10 @@ class BedrockModel(BaseChatModel):
             "system": system_prompts,
             "inferenceConfig": inference_config,
         }
+
         # add tool config
         if chat_request.tools:
+            print("TOOL USAGE...")
             args["toolConfig"] = {
                 "tools": [
                     self._convert_tool_spec(t.function) for t in chat_request.tools
@@ -400,17 +413,21 @@ class BedrockModel(BaseChatModel):
                     # Specific tool to use
                     assert "function" in chat_request.tool_choice
                     args["toolConfig"]["toolChoice"] = {
-                        "tool": {"name": chat_request.tool_choice["function"].get("name", "")}}
+                        "tool": {
+                            "name": chat_request.tool_choice["function"].get("name", "")
+                        }
+                    }
+
         return args
 
     def _create_response(
-            self,
-            model: str,
-            message_id: str,
-            content: list[dict] = None,
-            finish_reason: str | None = None,
-            input_tokens: int = 0,
-            output_tokens: int = 0,
+        self,
+        model: str,
+        message_id: str,
+        content: list[dict] = None,
+        finish_reason: str | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> ChatResponse:
 
         message = ChatResponseMessage(
@@ -460,7 +477,7 @@ class BedrockModel(BaseChatModel):
         return response
 
     def _create_response_stream(
-            self, model_id: str, message_id: str, chunk: dict
+        self, model_id: str, message_id: str, chunk: dict
     ) -> ChatStreamResponse | None:
         """Parsing the Bedrock stream response chunk.
 
@@ -512,7 +529,7 @@ class BedrockModel(BaseChatModel):
                             index=index,
                             function=ResponseFunction(
                                 arguments=delta["toolUse"]["input"],
-                            )
+                            ),
                         )
                     ]
                 )
@@ -583,9 +600,9 @@ class BedrockModel(BaseChatModel):
             )
 
     def _parse_content_parts(
-            self,
-            message: UserMessage,
-            model_id: str,
+        self,
+        message: UserMessage,
+        model_id: str,
     ) -> list[dict]:
         if isinstance(message.content, str):
             return [
@@ -667,12 +684,15 @@ class BedrockModel(BaseChatModel):
                 "max_tokens": "length",
                 "stop_sequence": "stop",
                 "complete": "stop",
-                "content_filtered": "content_filter"
+                "content_filtered": "content_filter",
             }
-            return finish_reason_mapping.get(finish_reason.lower(), finish_reason.lower())
+            return finish_reason_mapping.get(
+                finish_reason.lower(), finish_reason.lower()
+            )
         return None
 
 
+# Base class for embedding models
 class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
     accept = "application/json"
     content_type = "application/json"
@@ -697,12 +717,12 @@ class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
             raise HTTPException(status_code=500, detail=str(e))
 
     def _create_response(
-            self,
-            embeddings: list[float],
-            model: str,
-            input_tokens: int = 0,
-            output_tokens: int = 0,
-            encoding_format: Literal["float", "base64"] = "float",
+        self,
+        embeddings: list[float],
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        encoding_format: Literal["float", "base64"] = "float",
     ) -> EmbeddingsResponse:
         data = []
         for i, embedding in enumerate(embeddings):
@@ -755,11 +775,15 @@ class CohereEmbeddingsModel(BedrockEmbeddingsModel):
             "input_type": "search_document",
             "truncate": "END",  # "NONE|START|END"
         }
+        print("args", args)
         return args
 
     def embed(self, embeddings_request: EmbeddingsRequest) -> EmbeddingsResponse:
+        print("CohereEmbeddingsModel.embed()", embeddings_request.model)
+
         response = self._invoke_model(
-            args=self._parse_args(embeddings_request), model_id=embeddings_request.model
+            args=self._parse_args(embeddings_request),  #
+            model_id=embeddings_request.model,
         )
         response_body = json.loads(response.get("body").read())
         if DEBUG:
@@ -778,8 +802,8 @@ class TitanEmbeddingsModel(BedrockEmbeddingsModel):
         if isinstance(embeddings_request.input, str):
             input_text = embeddings_request.input
         elif (
-                isinstance(embeddings_request.input, list)
-                and len(embeddings_request.input) == 1
+            isinstance(embeddings_request.input, list)
+            and len(embeddings_request.input) == 1
         ):
             input_text = embeddings_request.input[0]
         else:
@@ -816,7 +840,7 @@ class TitanEmbeddingsModel(BedrockEmbeddingsModel):
 def get_embeddings_model(model_id: str) -> BedrockEmbeddingsModel:
     model_name = SUPPORTED_BEDROCK_EMBEDDING_MODELS.get(model_id, "")
     if DEBUG:
-        logger.info("model name is " + model_name)
+        logger.info("embedding model name is " + model_name)
     match model_name:
         case "Cohere Embed Multilingual" | "Cohere Embed English":
             return CohereEmbeddingsModel()

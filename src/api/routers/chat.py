@@ -1,3 +1,7 @@
+""" Endpoints for chat completions """
+
+import json
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Body
@@ -15,22 +19,26 @@ router = APIRouter(
 )
 
 
-@router.post("/completions", response_model=ChatResponse | ChatStreamResponse, response_model_exclude_unset=True)
+@router.post(
+    "/completions",
+    response_model=ChatResponse | ChatStreamResponse,
+    response_model_exclude_unset=True,
+)
 async def chat_completions(
-        chat_request: Annotated[
-            ChatRequest,
-            Body(
-                examples=[
-                    {
-                        "model": "anthropic.claude-3-sonnet-20240229-v1:0",
-                        "messages": [
-                            {"role": "system", "content": "You are a helpful assistant."},
-                            {"role": "user", "content": "Hello!"},
-                        ],
-                    }
-                ],
-            ),
-        ]
+    chat_request: Annotated[
+        ChatRequest,
+        Body(
+            examples=[
+                {
+                    "model": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": "Hello!"},
+                    ],
+                }
+            ],
+        ),
+    ]
 ):
     if chat_request.model.lower().startswith("gpt-"):
         chat_request.model = DEFAULT_MODEL
@@ -38,8 +46,12 @@ async def chat_completions(
     # Exception will be raised if model not supported.
     model = BedrockModel()
     model.validate(chat_request)
+    print(time.strftime("%c"), "- using chat model:", chat_request.model)
+
     if chat_request.stream:
+        print("streaming reponse requested...")
         return StreamingResponse(
             content=model.chat_stream(chat_request), media_type="text/event-stream"
         )
-    return model.chat(chat_request)
+    else:
+        return model.chat(chat_request)

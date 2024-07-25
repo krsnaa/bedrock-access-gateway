@@ -1,7 +1,10 @@
+""" The main entry point of the application """
+
 import logging
+import time
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
@@ -9,6 +12,43 @@ from mangum import Mangum
 
 from api.routers import model, chat, embeddings
 from api.setting import API_ROUTE_PREFIX, TITLE, DESCRIPTION, SUMMARY, VERSION
+
+
+# kiku: ANSI color codes
+class Colors:
+    RESET = "\033[0m"
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+
+
+class ColoredFormatter(logging.Formatter):
+    FORMATS = {
+        logging.DEBUG: Colors.BLUE
+        + "%(asctime)s [%(levelname)s] %(message)s"
+        + Colors.RESET,
+        logging.INFO: Colors.GREEN
+        + "%(asctime)s [%(levelname)s] %(message)s"
+        + Colors.RESET,
+        logging.WARNING: Colors.YELLOW
+        + "%(asctime)s [%(levelname)s] %(message)s"
+        + Colors.RESET,
+        logging.ERROR: Colors.RED
+        + "%(asctime)s [%(levelname)s] %(message)s"
+        + Colors.RESET,
+        logging.CRITICAL: Colors.MAGENTA
+        + "%(asctime)s [%(levelname)s] %(message)s"
+        + Colors.RESET,
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
 
 config = {
     "title": TITLE,
@@ -21,6 +61,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
+
+# kiku: for logging each request
+logger = logging.getLogger(__name__)
+
 app = FastAPI(**config)
 
 app.add_middleware(
@@ -31,9 +75,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(model.router, prefix=API_ROUTE_PREFIX)
+
+# kiku: for logging each request
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    status_color = Colors.GREEN if response.status_code < 400 else Colors.RED
+    logger.info(
+        f"{request.method} {request.url.path} - Status: {status_color}{response.status_code}{Colors.RESET} - took: {Colors.CYAN}{process_time:.2f}s{Colors.RESET}"
+    )
+
+    return response
+
+
+""" 
+The primary purpose of this application is to provide an OpenAI-compatible API 
+interface for Amazon Bedrock AI services. It supports:
+ - Chat completions
+ - Embeddings
+ - Model information
+"""
+app.include_router(model.router)
 app.include_router(chat.router, prefix=API_ROUTE_PREFIX)
 app.include_router(embeddings.router, prefix=API_ROUTE_PREFIX)
+app.include_router(
+    embeddings.router
+)  # also expose with no prefix for notebook scenarios
 
 
 @app.get("/health")
@@ -47,7 +116,10 @@ async def validation_exception_handler(request, exc):
     return PlainTextResponse(str(exc), status_code=400)
 
 
+# The inclusion of the Mangum handler suggests that this application can be deployed
+# as an AWS Lambda function.
 handler = Mangum(app)
+
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
